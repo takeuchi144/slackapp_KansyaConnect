@@ -1,0 +1,61 @@
+flowchart TB
+    subgraph Slack["Slack Workspace"]
+        SlackUser["Slack Users"]
+        SlackBot["Slack Bot"]
+    end
+
+    subgraph AWS Cloud
+        subgraph Integration["Integration Layer"]
+            APIGW["API Gateway"]
+        end
+
+        subgraph Compute["Compute Layer"]
+            direction TB
+            EventLambda["Lambda\nEvent Handler"]
+            NotifyLambda["Lambda\nNotification"]
+            ResetLambda["Lambda\nDaily Points Reset"]
+        end
+
+        subgraph Storage["Storage Layer"]
+            DDB1["DynamoDB\nUsers Table"]
+            DDB2["DynamoDB\nTransaction Table"]
+        end
+
+        subgraph Events["Event Management"]
+            SNS["Amazon SNS"]
+            EB["EventBridge\nScheduler"]
+        end
+
+        subgraph Monitoring["Monitoring & Logging"]
+            CW["CloudWatch\nLogs & Metrics"]
+            CWAlarm["CloudWatch\nAlarms"]
+        end
+    end
+
+    %% Connections
+    SlackUser -->|"1. Send Message\n(@user ありがとう)"| SlackBot
+    SlackBot -->|"2. Send Event"| APIGW
+    APIGW -->|"3. Forward Request"| EventLambda
+    EventLambda -->|"4. Store Data"| DDB1
+    EventLambda -->|"5. Store Transaction"| DDB2
+    EventLambda -->|"6. Publish Event"| SNS
+    SNS -->|"7. Trigger"| NotifyLambda
+    NotifyLambda -->|"8. Send Notification"| SlackBot
+    
+    EB -->|"Daily Trigger"| ResetLambda
+    ResetLambda --> DDB1
+
+    %% Monitoring Connections
+    EventLambda -.->|"Logs"| CW
+    NotifyLambda -.->|"Logs"| CW
+    ResetLambda -.->|"Logs"| CW
+    CW -.->|"Alert"| CWAlarm
+
+    %% Styling
+    classDef aws fill:#FF9900,stroke:#232F3E,stroke-width:2px,color:white;
+    classDef slack fill:#4A154B,stroke:#4A154B,stroke-width:2px,color:white;
+    classDef monitor fill:#007CBD,stroke:#232F3E,stroke-width:2px,color:white;
+
+    class APIGW,EventLambda,NotifyLambda,ResetLambda,DDB1,DDB2,SNS,EB aws;
+    class SlackUser,SlackBot slack;
+    class CW,CWAlarm monitor;
