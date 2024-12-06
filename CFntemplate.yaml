@@ -1,0 +1,511 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: KansyaConnect - Slackでの感謝の気持ちを共有するシステム
+
+Parameters:
+  Environment:
+    Type: String
+    Default: prod
+    AllowedValues:
+      - prod
+      - dev
+    Description: デプロイ環境
+
+Mappings:
+  EnvironmentMap:
+    prod:
+      MemorySize: 128
+      Timeout: 30
+    dev: 
+      MemorySize: 128
+      Timeout: 30
+
+Resources:
+  # ECR Repositories
+  EventHandlerRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub ${AWS::StackName}-event-handler
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      ImageTagMutability: MUTABLE
+
+  InteractiveHandlerRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub ${AWS::StackName}-interactive-handler
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      ImageTagMutability: MUTABLE
+
+  AuthHandlerRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub ${AWS::StackName}-auth-handler
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      ImageTagMutability: MUTABLE
+
+  NotificationRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub ${AWS::StackName}-notification
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      ImageTagMutability: MUTABLE
+
+  ResetHandlerRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub ${AWS::StackName}-reset-handler
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      ImageTagMutability: MUTABLE
+
+  # DynamoDB Tables
+  UsersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub ${AWS::StackName}-users
+      AttributeDefinitions:
+        - AttributeName: user_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: user_id
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+
+  TransactionsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub ${AWS::StackName}-transactions
+      AttributeDefinitions:
+        - AttributeName: transaction_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: transaction_id
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+
+  AuthTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub ${AWS::StackName}-auth
+      AttributeDefinitions:
+        - AttributeName: workspace_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: workspace_id
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+      SSESpecification:
+        SSEEnabled: true
+      TimeToLiveSpecification:
+        AttributeName: expiration_time
+        Enabled: true
+
+  # Lambda Functions
+  EventHandlerFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: EventHandlerRepository
+    Properties:
+      FunctionName: !Sub ${AWS::StackName}-event-handler
+      PackageType: Image
+      Code:
+        ImageUri: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${AWS::StackName}-event-handler:latest
+      Role: !GetAtt EventHandlerRole.Arn
+      MemorySize: !FindInMap [EnvironmentMap, !Ref Environment, MemorySize]
+      Timeout: !FindInMap [EnvironmentMap, !Ref Environment, Timeout]
+      Environment:
+        Variables:
+          SLACK_BOT_TOKEN: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/KansyaConnect/slack-token'
+          SLACK_SIGNING_SECRET: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/KansyaConnect/slack-signing-secret'
+          SLACK_CLIENT_ID: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/KansyaConnect/slack-client-id'
+          SLACK_CLIENT_SECRET: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/KansyaConnect/slack-client-secret'
+          STACK_NAME: !Ref AWS::StackName
+          SNS_POINTS_TOPIC_ARN: !Ref EventTopic
+          SNS_INTERACTIVE_TOPIC_ARN: !Ref InteractiveTopic
+
+  EventHandlerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: DynamoDBAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                  - dynamodb:GetItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                Resource: 
+                  - !GetAtt UsersTable.Arn
+                  - !GetAtt TransactionsTable.Arn
+        - PolicyName: SNSPublish
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: sns:Publish
+                Resource: !Ref EventTopic
+
+  # API Gateway
+  ApiGatewayRestApi:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: !Sub ${AWS::StackName}-api
+
+  EventsResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref ApiGatewayRestApi
+      ParentId: !GetAtt ApiGatewayRestApi.RootResourceId
+      PathPart: slack
+
+  EventsSubResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref ApiGatewayRestApi
+      ParentId: !Ref EventsResource
+      PathPart: events
+
+  EventsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGatewayRestApi
+      ResourceId: !Ref EventsSubResource
+      HttpMethod: POST
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${EventHandlerFunction.Arn}/invocations
+
+  EventHandlerPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref EventHandlerFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGatewayRestApi}/*/POST/slack/events
+
+  InteractiveHandlerFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: InteractiveHandlerRepository
+    Properties:
+      FunctionName: !Sub ${AWS::StackName}-interactive-handler
+      PackageType: Image
+      Code:
+        ImageUri: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${AWS::StackName}-interactive-handler:latest
+      Role: !GetAtt InteractiveHandlerRole.Arn
+      MemorySize: !FindInMap [EnvironmentMap, !Ref Environment, MemorySize]
+      Timeout: !FindInMap [EnvironmentMap, !Ref Environment, Timeout]
+      Environment:
+        Variables:
+          SLACK_BOT_TOKEN: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/KansyaConnect/slack-token'
+          SLACK_SIGNING_SECRET: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/KansyaConnect/slack-signing-secret'
+          SLACK_CLIENT_ID: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/KansyaConnect/slack-client-id'
+          SLACK_CLIENT_SECRET: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/KansyaConnect/slack-client-secret'
+          STACK_NAME: !Ref AWS::StackName
+          SNS_POINTS_TOPIC_ARN: !Ref EventTopic
+          SNS_INTERACTIVE_TOPIC_ARN: !Ref InteractiveTopic
+
+  InteractiveResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref ApiGatewayRestApi
+      ParentId: !Ref EventsResource
+      PathPart: interactive
+
+  InteractiveMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGatewayRestApi
+      ResourceId: !Ref InteractiveResource
+      HttpMethod: POST
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${InteractiveHandlerFunction.Arn}/invocations
+
+  InteractiveHandlerPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref InteractiveHandlerFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGatewayRestApi}/*/POST/slack/interactive
+
+  InteractiveHandlerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: DynamoDBAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                  - dynamodb:GetItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                Resource: 
+                  - !GetAtt UsersTable.Arn
+                  - !GetAtt TransactionsTable.Arn
+        - PolicyName: SNSPublish
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: sns:Publish
+                Resource: !Ref InteractiveTopic
+
+  AuthHandlerFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: AuthHandlerRepository
+    Properties:
+      FunctionName: !Sub ${AWS::StackName}-auth-handler
+      PackageType: Image
+      Code:
+        ImageUri: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${AWS::StackName}-auth-handler:latest
+      Role: !GetAtt AuthHandlerRole.Arn
+      MemorySize: !FindInMap [EnvironmentMap, !Ref Environment, MemorySize]
+      Timeout: !FindInMap [EnvironmentMap, !Ref Environment, Timeout]
+      Environment:
+        Variables:
+          SLACK_BOT_TOKEN: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/KansyaConnect/slack-token'
+          SLACK_SIGNING_SECRET: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/KansyaConnect/slack-signing-secret'
+          SLACK_CLIENT_ID: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/KansyaConnect/slack-client-id'
+          SLACK_CLIENT_SECRET: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/KansyaConnect/slack-client-secret'
+          STACK_NAME: !Ref AWS::StackName
+          SNS_POINTS_TOPIC_ARN: !Ref EventTopic
+          SNS_INTERACTIVE_TOPIC_ARN: !Ref InteractiveTopic
+
+  OAuthResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref ApiGatewayRestApi
+      ParentId: !Ref EventsResource
+      PathPart: oauth
+
+  OAuthMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGatewayRestApi
+      ResourceId: !Ref OAuthResource
+      HttpMethod: GET
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${AuthHandlerFunction.Arn}/invocations
+
+  AuthHandlerPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref AuthHandlerFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGatewayRestApi}/*/GET/slack/oauth
+
+  AuthHandlerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: DynamoDBAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                  - dynamodb:GetItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                Resource: !GetAtt AuthTable.Arn
+
+  NotificationFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: NotificationRepository
+    Properties:
+      FunctionName: !Sub ${AWS::StackName}-notification
+      PackageType: Image
+      Code:
+        ImageUri: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${AWS::StackName}-notification:latest
+      Role: !GetAtt NotificationRole.Arn
+      MemorySize: !FindInMap [EnvironmentMap, !Ref Environment, MemorySize]
+      Timeout: !FindInMap [EnvironmentMap, !Ref Environment, Timeout]
+      Environment:
+        Variables:
+          SLACK_BOT_TOKEN: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/KansyaConnect/slack-token'
+          SLACK_SIGNING_SECRET: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/KansyaConnect/slack-signing-secret'
+          SLACK_CLIENT_ID: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/KansyaConnect/slack-client-id'
+          SLACK_CLIENT_SECRET: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/KansyaConnect/slack-client-secret'
+          STACK_NAME: !Ref AWS::StackName
+          SNS_POINTS_TOPIC_ARN: !Ref EventTopic
+          SNS_INTERACTIVE_TOPIC_ARN: !Ref InteractiveTopic
+
+  NotificationRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: DynamoDBRead
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                Resource: !GetAtt UsersTable.Arn
+
+  ResetFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: ResetHandlerRepository
+    Properties:
+      FunctionName: !Sub ${AWS::StackName}-reset-handler
+      PackageType: Image
+      Code:
+        ImageUri: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${AWS::StackName}-reset-handler:latest
+      Role: !GetAtt ResetRole.Arn
+      MemorySize: !FindInMap [EnvironmentMap, !Ref Environment, MemorySize]
+      Timeout: !FindInMap [EnvironmentMap, !Ref Environment, Timeout]
+      Environment:
+        Variables:
+          SLACK_BOT_TOKEN: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/KansyaConnect/slack-token'
+          SLACK_SIGNING_SECRET: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/KansyaConnect/slack-signing-secret'
+          SLACK_CLIENT_ID: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/KansyaConnect/slack-client-id'
+          SLACK_CLIENT_SECRET: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/KansyaConnect/slack-client-secret'
+          STACK_NAME: !Ref AWS::StackName
+          SNS_POINTS_TOPIC_ARN: !Ref EventTopic
+          SNS_INTERACTIVE_TOPIC_ARN: !Ref InteractiveTopic
+
+  ResetRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: DynamoDBCrudPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                  - dynamodb:GetItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                Resource: !GetAtt UsersTable.Arn
+
+  # SNS Topics
+  EventTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub ${AWS::StackName}-events
+
+  InteractiveTopic:
+    Type: AWS::SNS::Topic 
+    Properties:
+      TopicName: !Sub ${AWS::StackName}-interactive
+
+   NotificationFunctionEventTopicPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref NotificationFunction
+      Action: lambda:InvokeFunction
+      Principal: sns.amazonaws.com
+      SourceArn: !Ref EventTopic
+
+  NotificationFunctionInteractiveTopicPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref NotificationFunction
+      Action: lambda:InvokeFunction
+      Principal: sns.amazonaws.com
+      SourceArn: !Ref InteractiveTopic
+
+  ResetFunctionSchedule:
+    Type: AWS::Events::Rule
+    Properties:
+      ScheduleExpression: "cron(0 0 * * ? *)"  # 毎日午前0時に実行
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt ResetFunction.Arn
+          Id: "ResetFunctionTarget"
+
+  ResetFunctionSchedulePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ResetFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt ResetFunctionSchedule.Arn
+
+Outputs:
+  ApiEndpoint:
+    Description: API Gateway endpoint URL
+    Value: !Sub https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/slack/events
+  AuthEndpoint:
+    Description: OAuth Redirect URL
+    Value: !Sub https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/slack/oauth
+  InteractiveEndpoint:
+    Description: Interactive Endpoint URL
+    Value: !Sub https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/slack/interactive
+

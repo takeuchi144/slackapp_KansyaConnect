@@ -1,0 +1,21 @@
+{
+    "ok": true,
+    "app_id": "A0814TGLVGQ",
+    "authed_user": {
+      "id": "U07ASDG7V3P",
+      "scope": "im:read",
+      "access_token": "xoxp-7377914575056-7366458267125-8129318437158-a764e8ed867a290008cf1dfea2cc7599",
+      "token_type": "user"
+    },
+    "scope": "channels:history,channels:read,chat:write,groups:history,im:history,im:read,im:write,mpim:history,team:read,users:read,users:read.email,channels:join,channels:manage",
+    "token_type": "bot",
+    "access_token": "xoxb-7377914575056-8135851083539-Z9nuco1zAJ7A7azb2W4ANBx3",
+    "bot_user_id": "U083ZR12FFV",
+    "team": {
+      "id": "T07B3SWGX1N",
+      "name": "🇧🇹ブータンクラス(セカダイ4期)"
+    },
+    "enterprise": null,
+    "is_enterprise_install": false
+  }
+  

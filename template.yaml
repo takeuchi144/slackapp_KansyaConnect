@@ -1,6 +1,6 @@
-AWSTemplateFormatVersion: '2010-09-01'
+AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: Slack Thank You Points System
+Description: KansyaConnect - Slackでの感謝の気持ちを共有するシステム
 
 Globals:
   Function:
@@ -8,11 +8,25 @@ Globals:
     MemorySize: 128
     Environment:
       Variables:
-        SLACK_BOT_TOKEN: !Sub '{{resolve:secretsmanager:${AWS::StackName}/slack-token:SecretString:SLACK_BOT_TOKEN}}'
-        SLACK_SIGNING_SECRET: !Sub '{{resolve:secretsmanager:${AWS::StackName}/slack-secret:SecretString:SLACK_SIGNING_SECRET}}'
-
+        SLACK_BOT_TOKEN: !Sub '{{resolve:ssm:/KansyaConnect/slack-token}}'
+        SLACK_SIGNING_SECRET: !Sub '{{resolve:ssm:/KansyaConnect/slack-signing-secret}}'
+        SLACK_CLIENT_ID: !Sub '{{resolve:ssm:/KansyaConnect/slack-client-id}}'
+        SLACK_CLIENT_SECRET: !Sub '{{resolve:ssm:/KansyaConnect/slack-client-secret}}'
+        SLACK_APP_ID: !Sub '{{resolve:ssm:/KansyaConnect/slack-app-id}}'
+        STACK_NAME: !Ref AWS::StackName
+        SNS_POINTS_TOPIC_ARN: !Ref EventTopic
+        SNS_INTERACTIVE_TOPIC_ARN: !Ref InteractiveTopic
+        INITIAL_TEAM_ID: T07RD964YJ1
+        #SLACK_BOT_TOKEN: !Sub '{{resolve:ssm:/${AWS::StackName}/slack-token:1}}'
+        #SLACK_SIGNING_SECRET: !Sub '{{resolve:ssm:/${AWS::StackName}/slack-signing-secret:1}}'
+        #SLACK_CLIENT_ID: !Sub '{{resolve:ssm:/${AWS::StackName}/slack-client-id:1}}'
+        #SLACK_CLIENT_SECRET: !Sub '{{resolve:ssm:/${AWS::StackName}/slack-client-secret:1}}'
+        #STACK_NAME: !Ref AWS::StackName
+        #SNS_POINTS_TOPIC_ARN: !Ref EventTopic
+        #SNS_INTERACTIVE_TOPIC_ARN: !Ref InteractiveTopic
+    
 Resources:
-  # DynamoDB Tables
+  
   UsersTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -37,12 +51,31 @@ Resources:
           KeyType: HASH
       BillingMode: PAY_PER_REQUEST
 
+  
+  AuthTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub ${AWS::StackName}-auth
+      AttributeDefinitions:
+        - AttributeName: workspace_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: workspace_id
+          KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+
   # Lambda Functions
   EventHandlerFunction:
     Type: AWS::Serverless::Function
+    #DependsOn: EventHandlerRepository
+    Metadata:
+      Dockerfile: ./handlers/event_handler/Dockerfile
+      DockerContext: ./src
     Properties:
       PackageType: Image
-      ImageUri: event-handler
+      ImageUri: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/kansyaconnect-event-handler:latest
       Events:
         ApiEvent:
           Type: Api
@@ -53,29 +86,92 @@ Resources:
         - DynamoDBCrudPolicy:
             TableName: !Ref UsersTable
         - DynamoDBCrudPolicy:
+            TableName: !Ref AuthTable
+        - DynamoDBCrudPolicy:
             TableName: !Ref TransactionsTable
         - SNSPublishMessagePolicy:
-            TopicName: !GetAtt NotificationTopic.TopicName
+            TopicName: !GetAtt EventTopic.TopicName
+        
+
+  InteractiveHandlerFunction:
+    Type: AWS::Serverless::Function
+    #DependsOn: InteractiveHandlerRepository
+    Metadata:
+      Dockerfile: ./handlers/interactive_handler/Dockerfile
+      DockerContext: ./src
+    Properties:
+      PackageType: Image
+      ImageUri: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/kansyaconnect-interactive-handler:latest
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /slack/interactive
+            Method: post
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UsersTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref AuthTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TransactionsTable
+        - SNSPublishMessagePolicy:
+            TopicName: !GetAtt InteractiveTopic.TopicName
+
+  AuthHandlerFunction:
+    Type: AWS::Serverless::Function
+    #DependsOn: AuthHandlerRepository
+    Metadata:
+      Dockerfile: ./handlers/auth_handler/Dockerfile
+      DockerContext: ./src
+    Properties:
+      PackageType: Image
+      ImageUri: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/kansyaconnect-auth-handler:latest
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /slack/oauth
+            Method: get
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref AuthTable
 
   NotificationFunction:
     Type: AWS::Serverless::Function
+    #DependsOn: NotificationRepository
+    Metadata:
+      Dockerfile: ./handlers/notification/Dockerfile
+      DockerContext: ./src
     Properties:
       PackageType: Image
-      ImageUri: notification
+      ImageUri: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/kansyaconnect-interactive-handler:latest
       Events:
-        SNSEvent:
+        EventSNSEvent:
           Type: SNS
           Properties:
-            Topic: !Ref NotificationTopic
+            Topic: !Ref EventTopic
+        InteractiveSNSEvent:
+          Type: SNS
+          Properties:
+            Topic: !Ref InteractiveTopic
       Policies:
-        - DynamoDBReadPolicy:
+        - DynamoDBCrudPolicy:
             TableName: !Ref UsersTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref AuthTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TransactionsTable
 
   ResetFunction:
     Type: AWS::Serverless::Function
+    #DependsOn: ResetHandlerRepository
+    Metadata:
+      Dockerfile: ./handlers/reset_handler/Dockerfile
+      DockerContext: ./src
     Properties:
       PackageType: Image
-      ImageUri: reset-handler
+      ImageUri: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/kansyaconnect-reset-handler:latest
       Events:
         DailyEvent:
           Type: Schedule
@@ -85,13 +181,45 @@ Resources:
         - DynamoDBCrudPolicy:
             TableName: !Ref UsersTable
 
-  # SNS Topic
-  NotificationTopic:
+  InitialDataFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: input_initial_data.handler
+      Runtime: python3.12
+      Timeout: 30
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref AuthTable
+      
+#  InitialDataCustomResource:
+ #   Type: Custom::InitialData
+  #  DependsOn: 
+  #  - AuthTable
+  #  - InitialDataFunction
+  #  Properties:
+  #    ServiceToken: !GetAtt InitialDataFunction.Arn
+  #    TableName: !Ref AuthTable
+      #Timestamp: !Ref AWS::Timestamp
+
+  # SNS Topics
+  EventTopic:
     Type: AWS::SNS::Topic
     Properties:
-      TopicName: !Sub ${AWS::StackName}-notifications
+      TopicName: !Sub ${AWS::StackName}-events
+
+  InteractiveTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub ${AWS::StackName}-interactive
 
 Outputs:
   ApiEndpoint:
     Description: API Gateway endpoint URL
     Value: !Sub https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/slack/events
+  AuthEndpoint:
+    Description: OAuth Redirect URL
+    Value: !Sub https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/slack/oauth
+  InteractiveEndpoint:
+    Description: Interactive Endpoint URL
+    Value: !Sub https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/slack/interactive

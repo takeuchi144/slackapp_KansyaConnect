@@ -1,8 +1,11 @@
 FROM public.ecr.aws/lambda/python:3.12
 
-COPY app.py requirements.txt ./
+# handlers/event_handlerからファイルをコピー
+COPY handlers/event_handler/* ./
+
+# libからファイルをコピー（srcがルートなので、直接libにアクセス可能）
+COPY lib ./lib
 
 RUN python3.12 -m pip install -r requirements.txt -t .
 
-# Command can be overwritten by providing a different command in the template directly.
-CMD ["app.lambda_handler"]
+CMD ["event_handler.lambda_handler"]

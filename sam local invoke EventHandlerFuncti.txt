@@ -1,0 +1,3 @@
+sam local invoke "EventHandlerFunction" -e events/message_event.json --debug
+
+sam local invoke "InteractiveHandlerFunction" -e events/interactive_event.json --debug

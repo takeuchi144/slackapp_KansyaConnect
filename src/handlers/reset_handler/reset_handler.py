@@ -1,17 +1,20 @@
 import boto3
 import datetime
+from typing import Dict, Any
 from lib.db import DynamoDBManager
 
-dynamodb = boto3.resource('dynamodb')
-db_manager = DynamoDBManager(dynamodb)
+from boto3.resources.base import ServiceResource
 
-def lambda_handler(event, context):
+dynamodb: ServiceResource = boto3.resource('dynamodb')
+db_manager: DynamoDBManager = DynamoDBManager(dynamodb)
+
+def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     try:
         # 日付の取得
-        today = datetime.datetime.now().strftime('%Y-%m-%d')
+        today: str = datetime.datetime.now().strftime('%Y-%m-%d')
         
         # 全ユーザーの日次ポイントをリセット
-        result = db_manager.reset_daily_points(today)
+        result: Dict[str, int] = db_manager.reset_daily_points(today)
         
         return {
             'statusCode': 200,

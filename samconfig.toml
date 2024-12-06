@@ -3,7 +3,7 @@
 version = 0.1
 
 [default.global.parameters]
-stack_name = "slack_app_aws_CheersApp"
+stack_name = "KansyaConnect"
 
 [default.build.parameters]
 parallel = true
@@ -15,13 +15,20 @@ lint = true
 capabilities = "CAPABILITY_IAM"
 confirm_changeset = true
 resolve_s3 = true
-resolve_image_repos = true
 
+region = "us-west-1"
+image_repositories = ["EventHandlerFunction=248478119516.dkr.ecr.us-west-1.amazonaws.com/kansyaconnect-event-handler", "NotificationFunction=248478119516.dkr.ecr.us-west-1.amazonaws.com/kansyaconnect-notification", "ResetFunction=248478119516.dkr.ecr.us-west-1.amazonaws.com/kansyaconnect-reset-handler", "InteractiveHandlerFunction=248478119516.dkr.ecr.us-west-1.amazonaws.com/kansyaconnect-interactive-handler", "AuthHandlerFunction=248478119516.dkr.ecr.us-west-1.amazonaws.com/kansyaconnect-auth-handler"]
+s3_prefix = "KansyaConnect"
+disable_rollback = true
 [default.package.parameters]
 resolve_s3 = true
 
 [default.sync.parameters]
 watch = true
+template_file = "c:\\Users\\ha-takeuchi\\slackapp\\slack_app_aws_KansyaConnect\\template.yaml"
+s3_bucket = "haruya-takeuchi-slackapp"
+dependency_layer = false
+use_container = true
 
 [default.local_start_api.parameters]
 warm_containers = "EAGER"

@@ -1,0 +1,143 @@
+{
+    "resource": "slackevents",
+    "path": "slackevents",
+    "httpMethod": "POST",
+    "headers": {
+        "Accept": "",
+        "Accept-Encoding": "gzip,deflate",
+        "CloudFront-Forwarded-Proto": "https",
+        "CloudFront-Is-Desktop-Viewer": "true",
+        "CloudFront-Is-Mobile-Viewer": "false",
+        "CloudFront-Is-SmartTV-Viewer": "false",
+        "CloudFront-Is-Tablet-Viewer": "false",
+        "CloudFront-Viewer-ASN": "14618",
+        "CloudFront-Viewer-Country": "US",
+        "Content-Type": "application/json",
+        "Host": "a8pmeenb3j.execute-api.us-west-1.amazonaws.com",
+        "User-Agent": "Slackbot 1.0 (+https://api.slack.com/robots)",
+        "Via": "1.1 1c270697a065feaf9aaa711be1cb8b0c.cloudfront.net (CloudFront)",
+        "X-Amz-Cf-Id": "32vHo3XKvMi2tkPASdzqNoaSfyd5ovIZYcHO3Y_jkuoy_X1_Itir9w==",
+        "X-Amzn-Trace-Id": "Root=1-674f4058-3071c0a8777d63050e1fcec3",
+        "X-Forwarded-For": "98.82.19.244, 15.158.41.72",
+        "X-Forwarded-Port": "443",
+        "X-Forwarded-Proto": "https",
+        "X-Slack-Request-Timestamp": "1733247064",
+        "X-Slack-Retry-Num": "1",
+        "X-Slack-Retry-Reason": "http_timeout",
+        "X-Slack-Signature": "v0=2c0ee8e03a1f3539d607883ce85c23ba38d3dd51a6229641f87796e1536a1424"
+    },
+    "multiValueHeaders": {
+        "Accept": [""],
+        "Accept-Encoding": ["gzip,deflate"],
+        "CloudFront-Forwarded-Proto": ["https"],
+        "CloudFront-Is-Desktop-Viewer": ["true"],
+        "CloudFront-Is-Mobile-Viewer": ["false"],
+        "CloudFront-Is-SmartTV-Viewer": ["false"],
+        "CloudFront-Is-Tablet-Viewer": ["false"],
+        "CloudFront-Viewer-ASN": ["14618"],
+        "CloudFront-Viewer-Country": ["US"],
+        "Content-Type": ["application/json"],
+        "Host": ["a8pmeenb3j.execute-api.us-west-1.amazonaws.com"],
+        "User-Agent": ["Slackbot 1.0 (+https://api.slack.com/robots)"],
+        "Via": ["1.1 1c270697a065feaf9aaa711be1cb8b0c.cloudfront.net (CloudFront)"],
+        "X-Amz-Cf-Id": ["32vHo3XKvMi2tkPASdzqNoaSfyd5ovIZYcHO3Y_jkuoy_X1_Itir9w=="],
+        "X-Amzn-Trace-Id": ["Root=1-674f4058-3071c0a8777d63050e1fcec3"],
+        "X-Forwarded-For": ["98.82.19.244, 15.158.41.72"],
+        "X-Forwarded-Port": ["443"],
+        "X-Forwarded-Proto": ["https"],
+        "X-Slack-Request-Timestamp": ["1733247064"],
+        "X-Slack-Retry-Num": ["1"],
+        "X-Slack-Retry-Reason": ["http_timeout"],
+        "X-Slack-Signature": ["v0=2c0ee8e03a1f3539d607883ce85c23ba38d3dd51a6229641f87796e1536a1424"]
+    },
+    "queryStringParameters": null,
+    "multiValueQueryStringParameters": null,
+    "pathParameters": null,
+    "stageVariables": null,
+    "requestContext": {
+        "resourceId": "9u7kq4",
+        "resourcePath": "slackevents",
+        "httpMethod": "POST",
+        "extendedRequestId": "COb99HHCyK4ELLg=",
+        "requestTime": "03/Dec/2024:17:31:04 +0000",
+        "path": "Prod/slackevents",
+        "accountId": "248478119516",
+        "protocol": "HTTP/1.1",
+        "stage": "Prod",
+        "domainPrefix": "a8pmeenb3j",
+        "requestTimeEpoch": 1733247064917,
+        "requestId": "5b753d65-5698-4503-befb-a003111e87bd",
+        "identity": {
+            "cognitoIdentityPoolId": null,
+            "accountId": null,
+            "cognitoIdentityId": null,
+            "caller": null,
+            "sourceIp": "98.82.19.244",
+            "principalOrgId": null,
+            "accessKey": null,
+            "cognitoAuthenticationType": null,
+            "cognitoAuthenticationProvider": null,
+            "userArn": null,
+            "userAgent": "Slackbot 1.0 (+https://api.slack.com/robots)",
+            "user": null
+        },
+        "domainName": "a8pmeenb3j.execute-api.us-west-1.amazonaws.com",
+        "deploymentId": "npuuvs",
+        "apiId": "a8pmeenb3j"
+    },
+    "body": {
+        "token": "tZxeLrDI5EdJIAIRvVINcre7",
+        "team_id": "T07RD964YJ1",
+        "context_team_id": "T07RD964YJ1",
+        "context_enterprise_id": null,
+        "api_app_id": "A0814TGLVGQ",
+        "event": {
+            "user": "U07S4UD61NC",
+            "type": "message",
+            "ts": "1733247061.114779",
+            "client_msg_id": "0e7ae4c2-befd-4d44-9047-d4c021f1c270",
+            "text": "@U07RDDDLA5T ありがとう",
+            "team": "T07RD964YJ1",
+            "blocks": [
+                {
+                    "type": "rich_text",
+                    "block_id": "oeqiN",
+                    "elements": [
+                        {
+                            "type": "rich_text_section",
+                            "elements": [
+                                {
+                                    "type": "user",
+                                    "user_id": "U07RDDDLA5T"
+                                },
+                                {
+                                    "type": "text",
+                                    "text": " ありがとう"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ],
+            "channel": "C07S4UD7ZH6",
+            "event_ts": "1733247061.114779",
+            "channel_type": "channel"
+        },
+        "type": "event_callback",
+        "event_id": "Ev083GEVMHQA",
+        "event_time": 1733247061,
+        "authorizations": [
+            {
+                "enterprise_id": null,
+                "team_id": "T07RD964YJ1",
+                "user_id": "U0812V72JDP",
+                "is_bot": true,
+                "is_enterprise_install": false
+            }
+        ],
+        "is_ext_shared_channel": false,
+        "event_context": "4-eyJldCI6Im1lc3NhZ2UiLCJ0aWQiOiJUMDdSRDk2NFlKMSIsImFpZCI6IkEwODE0VEdMVkdRIiwiY2lkIjoiQzA3UzRVRDdaSDYifQ"
+    },
+    "isBase64Encoded": false
+}
+  
